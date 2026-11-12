@@ -76,14 +76,19 @@ with `ip -d -j link`, not through tunneld.
 
 Full suite: **33 passed**, both with a release tunneld and with every tunneld
 instance built with ASan + UBSan (0 sanitizer reports, LeakSanitizer on 8
-clean exits).
+clean exits), locally and on CI.
 
-## Results (WSL2, Ubuntu 24.04; full tables in [results/wsl/RESULTS.md](results/wsl/RESULTS.md))
+## Results
+
+Local = WSL2 (Ubuntu 24.04); CI = GitHub `ubuntu-24.04` runner. Full tables:
+[results/wsl/RESULTS.md](results/wsl/RESULTS.md),
+[results/ci/RESULTS.md](results/ci/RESULTS.md).
 
 **Kernel vs datastore after every one of 900 randomized transactions**
 (3 seeds × 300; 1–4 creates / deletes / changes each; GRE endpoint pairs
 and VNIs drawn from small pools, so conflicts happen naturally rather than
-being injected):
+being injected). The seeds are fixed and the counts are identical locally
+and on CI:
 
 | | rollback (tunneld) | control: rollback disabled |
 |---|---|---|
@@ -91,57 +96,21 @@ being injected):
 | rejected because tunneld's *own* bookkeeping was stale | 0 | **531** |
 | transactions after which kernel ≠ running | **0 / 900** | **893 / 900** (first after tx 1–4) |
 | worst state | — | 13 orphan links, 23 missing |
-| "delete all tunnels" over NETCONF at the end | ok | **rejected** (`Cannot find device "t0"`) |
+| "delete all tunnels" over NETCONF at the end | ok (3/3) | **rejected** (3/3, `Cannot find device`) |
+| a fresh, correct tunneld starts on the final running config | 3/3 | **fails 2/3** |
 
-The control does not just leak a few links. After the first failure its
-idea of what is applied is wrong, so every later diff starts from a wrong
-baseline: deletes hit links that are not there, creates collide with links
-that are. In the end the operator cannot even clear the config through the
-NBI; only a restart, which rebuilds from the datastore, recovers it.
-
-**Latency, one NETCONF change** (median of 200):
+**Latency, one NETCONF change** (median of 200, local / CI):
 
 | | ncclient default | ncclient `TICK` = 1 ms |
 |---|---|---|
-| edit-config rejected by YANG | 118 ms | **2.5 ms** |
-| get-config | 101 ms | **2.2 ms** |
-| get (config + tunneld's state) | 118 ms | **3.3 ms** |
-| edit-config creating 1 tunnel (incl. 2 `ip` execs) | 109 ms | **5.9 ms** |
-| gNMI Set creating 1 tunnel (gateway forks `sysrepocfg`) | 7.3 ms | |
+| edit-config rejected by YANG | 118 / 101 ms | **2.4 / 1.8 ms** |
+| get-config | 118 / 101 ms | **2.2 / 1.7 ms** |
+| get (config + tunneld's state) | 118 / 102 ms | **3.1 / 2.3 ms** |
+| edit-config creating 1 tunnel (incl. 2 `ip` execs) | 108 / 112 ms | **5.9 / 4.5 ms** |
+| gNMI Set creating 1 tunnel (gateway forks `sysrepocfg`) | 7.5 / 5.4 ms | |
 
-One edit-config creating k tunnels: 1 → 0.12 s, 100 → 0.42 s,
-500 → 1.67 s (3.3 ms/tunnel). **Deleting** them: 500 → 12.6 s.
-
-## Findings from the measurements
-
-5. **About 95% of NETCONF latency was the client's poll interval.**
-   Every NETCONF operation took ≥ 100 ms, even a YANG reject that never
-   reaches tunneld, while gNMI, which forks a process per call, took 7 ms.
-   ncclient's session thread sits in `select(timeout=TICK)` with
-   `TICK = 0.1`, and a request queued by the caller is written only when
-   that select returns. With `TICK` at 1 ms the same RPCs take 2–6 ms. The
-   server stack (netopeer2 → sysrepo → tunneld → kernel) was never the
-   bottleneck.
-6. **Deleting a link costs ~10× more than creating one, inside the
-   kernel.** For 200 VXLAN links: creating them via one `ip -batch` takes
-   29–50 ms; deleting them via one `ip -batch` takes 3.4–5.6 s. The batch
-   removes fork cost, so this is per netlink request. Deleting the same 200
-   with **one** request (`ip link del group 7`) takes 49–70 ms. That is
-   consistent with netdev unregistration paying a fixed synchronization cost
-   per request, which a single many-device request shares. (I have not
-   traced the kernel to confirm the mechanism.) tunneld still deletes one
-   link per request; grouping the deletes of a transaction is the obvious
-   next step.
-7. **A slow apply makes the kernel briefly run ahead.** sysrepo's default
-   callback timeout is 5 s; a 500-tunnel apply exceeded it. The client got
-   `processing timed out` and the datastore was not changed, while tunneld
-   was still creating links. sysrepo does send the late subscriber
-   `SR_EV_ABORT` when it returns, and the undo log removes them. So the
-   divergence is real but closes by itself
-   (`test_slow_apply_timeout_is_undone`: 9 links ahead, then 0). netopeer2
-   now runs with `-t 20`, below ncclient's 30 s client timeout. With 60 s
-   the client gave up first while the server still held a sysrepo lock, and
-   every following test failed on `Locking a rwlock failed`.
+One edit-config creating 500 tunnels: 1.8 / 1.2 s (3.7 / 2.5 ms per
+tunnel). **Deleting** the same 500: 11.6 / 5.3 s.
 
 ## Bugs found while building it
 
@@ -174,10 +143,51 @@ One edit-config creating k tunnels: 1 → 0.12 s, 100 → 0.42 s,
    have it. The test helper strips the token. tunneld never parses `ip`
    output as JSON.
 
-The control experiment also showed a second-order effect. With rollback
-disabled, tunneld's "applied" table no longer matches the kernel after the
-first failure, so later diffs are computed against a wrong baseline and
-**divergence compounds**. It is not one orphan per failure.
+## Findings from the measurements
+
+5. **The no-rollback control does not just leak links. It poisons the
+   datastore.** After its first failure, the control's idea of what is
+   applied is wrong, so every later diff starts from a wrong baseline.
+   Deletes hit links that are not there (531 rejects of that kind), and
+   creates are skipped for links it wrongly thinks exist. It therefore
+   *accepts* configs the kernel cannot hold. At the end of 2 of 3 runs, the
+   running datastore contained such a config. A fresh, **correct** tunneld
+   then failed its startup apply (`subscribe: User callback failed`, after
+   `File exists` on a create into an empty kernel) and could not start at
+   all. "Delete all" over NETCONF was refused in 3 of 3 runs. Recovery
+   needed stopping tunneld and clearing running with no subscriber.
+   The test harness itself first hid this. My restart helper ignored a
+   tunneld that exited before "ready", and the next benchmark ran with **no
+   subscriber**. sysrepo commits such edits without touching the kernel,
+   which showed up as a missing link. The helper now raises.
+6. **About 95% of NETCONF latency was the client's poll interval.**
+   Every NETCONF operation took ≥ 100 ms, even a YANG reject that never
+   reaches tunneld, while gNMI, which forks a process per call, took 5–7 ms.
+   ncclient's session thread sits in `select(timeout=TICK)` with
+   `TICK = 0.1`, and a request queued by the caller is written only when
+   that select returns. With `TICK` at 1 ms the same RPCs take 2–6 ms. The
+   server stack (netopeer2 → sysrepo → tunneld → kernel) was never the
+   bottleneck.
+7. **Deleting a link costs far more than creating one, inside the
+   kernel.** For 200 VXLAN links via one `ip -batch` (no fork cost, still
+   one netlink request per link), local / CI: creating takes 27–37 / 30–31 ms,
+   while deleting takes 3.5–3.6 / 1.2 s. Deleting the same 200 with **one**
+   request (`ip link del group 7`) takes 36–52 / 29–33 ms. That is
+   consistent with netdev unregistration paying a fixed synchronization cost
+   per request, which a single many-device request shares. (I have not
+   traced the kernel to confirm the mechanism.) tunneld still deletes one
+   link per request; grouping a transaction's deletes is the obvious next
+   step.
+8. **A slow apply makes the kernel briefly run ahead.** sysrepo's default
+   callback timeout is 5 s; a 500-tunnel apply exceeded it. The client got
+   `processing timed out` and the datastore was not changed, while tunneld
+   was still creating links. sysrepo does send the late subscriber
+   `SR_EV_ABORT` when it returns, and the undo log removes them. So the
+   divergence is real but closes by itself
+   (`test_slow_apply_timeout_is_undone`: 9 links ahead, then 0). netopeer2
+   now runs with `-t 20`, below ncclient's 30 s client timeout. With 60 s
+   the client gave up first while the server still held a sysrepo lock, and
+   every following test failed on `Locking a rwlock failed`.
 
 ## Limits
 
@@ -194,7 +204,11 @@ first failure, so later diffs are computed against a wrong baseline and
   exercised.
 * IPv4 endpoints only; VXLAN and GRE only; no underlay routing. These are
   management-plane tests and no traffic is sent.
-* WSL2 latency numbers are noisy. Use them for ratios.
+* Edits made while tunneld is **not running** are committed by sysrepo
+  without kernel validation. If such a config can't be realized, tunneld
+  refuses to start on it (finding 5) rather than applying part of it.
+* WSL2 latency numbers are noisy. Use them for ratios. CI numbers are
+  steadier.
 
 ## Versions
 

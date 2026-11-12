@@ -1,0 +1,89 @@
+{
+ "raw_ip_create_delete_3_execs": {
+  "n": 200,
+  "median_ms": 16.99,
+  "p90_ms": 20.95
+ },
+ "netconf_yang_reject": {
+  "n": 200,
+  "median_ms": 101.24,
+  "p90_ms": 101.38
+ },
+ "netconf_get_config": {
+  "n": 200,
+  "median_ms": 101.12,
+  "p90_ms": 101.23
+ },
+ "netconf_get_with_state": {
+  "n": 200,
+  "median_ms": 101.93,
+  "p90_ms": 102.05
+ },
+ "tick1ms_netconf_yang_reject": {
+  "n": 200,
+  "median_ms": 1.83,
+  "p90_ms": 1.91
+ },
+ "tick1ms_netconf_get_config": {
+  "n": 200,
+  "median_ms": 1.67,
+  "p90_ms": 1.76
+ },
+ "tick1ms_netconf_get_with_state": {
+  "n": 200,
+  "median_ms": 2.33,
+  "p90_ms": 2.39
+ },
+ "tick1ms_netconf_create_1": {
+  "n": 200,
+  "median_ms": 4.53,
+  "p90_ms": 4.74
+ },
+ "netconf_create_1": {
+  "n": 200,
+  "median_ms": 112.1,
+  "p90_ms": 114.71
+ },
+ "netconf_delete_1": {
+  "n": 200,
+  "median_ms": 128.02,
+  "p90_ms": 130.78
+ },
+ "netconf_kernel_reject_undo2": {
+  "n": 50,
+  "median_ms": 130.62,
+  "p90_ms": 136.95
+ },
+ "gnmi_create_1": {
+  "n": 100,
+  "median_ms": 5.36,
+  "p90_ms": 5.76
+ },
+ "gnmi_get_1": {
+  "n": 100,
+  "median_ms": 2.31,
+  "p90_ms": 2.45
+ },
+ "netconf_batch_create": {
+  "1": {
+   "create_s": 0.117,
+   "per_tunnel_ms": 117.04,
+   "delete_all_s": 0.133
+  },
+  "10": {
+   "create_s": 0.125,
+   "per_tunnel_ms": 12.52,
+   "delete_all_s": 0.214
+  },
+  "100": {
+   "create_s": 0.323,
+   "per_tunnel_ms": 3.23,
+   "delete_all_s": 1.154
+  },
+  "500": {
+   "create_s": 1.224,
+   "per_tunnel_ms": 2.45,
+   "delete_all_s": 5.274
+  }
+ }
+}

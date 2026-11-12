@@ -1,89 +1,89 @@
 {
  "raw_ip_create_delete_3_execs": {
   "n": 200,
-  "median_ms": 44.82,
-  "p90_ms": 59.17
+  "median_ms": 44.0,
+  "p90_ms": 52.45
  },
  "netconf_yang_reject": {
   "n": 200,
-  "median_ms": 118.06,
-  "p90_ms": 119.79
+  "median_ms": 118.11,
+  "p90_ms": 118.87
  },
  "netconf_get_config": {
   "n": 200,
-  "median_ms": 101.39,
-  "p90_ms": 102.69
+  "median_ms": 118.07,
+  "p90_ms": 119.44
  },
  "netconf_get_with_state": {
   "n": 200,
-  "median_ms": 118.23,
-  "p90_ms": 120.56
+  "median_ms": 118.27,
+  "p90_ms": 119.46
  },
  "tick1ms_netconf_yang_reject": {
   "n": 200,
-  "median_ms": 2.52,
-  "p90_ms": 3.12
+  "median_ms": 2.36,
+  "p90_ms": 2.75
  },
  "tick1ms_netconf_get_config": {
   "n": 200,
-  "median_ms": 2.22,
-  "p90_ms": 2.89
+  "median_ms": 2.16,
+  "p90_ms": 2.41
  },
  "tick1ms_netconf_get_with_state": {
   "n": 200,
-  "median_ms": 3.32,
-  "p90_ms": 4.12
+  "median_ms": 3.08,
+  "p90_ms": 3.59
  },
  "tick1ms_netconf_create_1": {
   "n": 200,
-  "median_ms": 5.93,
-  "p90_ms": 7.41
+  "median_ms": 5.91,
+  "p90_ms": 7.01
  },
  "netconf_create_1": {
   "n": 200,
-  "median_ms": 108.8,
-  "p90_ms": 119.42
+  "median_ms": 107.86,
+  "p90_ms": 120.4
  },
  "netconf_delete_1": {
   "n": 200,
-  "median_ms": 135.7,
-  "p90_ms": 145.8
+  "median_ms": 135.3,
+  "p90_ms": 145.0
  },
  "netconf_kernel_reject_undo2": {
   "n": 50,
-  "median_ms": 171.47,
-  "p90_ms": 188.16
+  "median_ms": 164.03,
+  "p90_ms": 176.37
  },
  "gnmi_create_1": {
   "n": 100,
-  "median_ms": 7.26,
-  "p90_ms": 9.78
+  "median_ms": 7.45,
+  "p90_ms": 11.09
  },
  "gnmi_get_1": {
   "n": 100,
-  "median_ms": 3.54,
-  "p90_ms": 4.6
+  "median_ms": 3.74,
+  "p90_ms": 4.15
  },
  "netconf_batch_create": {
   "1": {
-   "create_s": 0.123,
-   "per_tunnel_ms": 123.37,
-   "delete_all_s": 0.155
+   "create_s": 0.13,
+   "per_tunnel_ms": 129.68,
+   "delete_all_s": 0.134
   },
   "10": {
-   "create_s": 0.152,
-   "per_tunnel_ms": 15.19,
-   "delete_all_s": 0.346
+   "create_s": 0.136,
+   "per_tunnel_ms": 13.6,
+   "delete_all_s": 0.329
   },
   "100": {
-   "create_s": 0.417,
-   "per_tunnel_ms": 4.17,
-   "delete_all_s": 2.654
+   "create_s": 0.423,
+   "per_tunnel_ms": 4.23,
+   "delete_all_s": 2.482
   },
   "500": {
-   "create_s": 1.674,
-   "per_tunnel_ms": 3.35,
-   "delete_all_s": 12.607
+   "create_s": 1.841,
+   "per_tunnel_ms": 3.68,
+   "delete_all_s": 11.557
   }
  }
 }
