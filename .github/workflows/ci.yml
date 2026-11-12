@@ -47,7 +47,9 @@ jobs:
         run: NN_BUILD=$HOME/nn-build-asan scripts/test.sh
       - name: asan report
         if: always()
-        run: grep -E "ERROR: (Address|Leak|Undefined)|runtime error" ~/nn/log/tunneld.log && exit 1 || echo "no sanitizer reports"
+        run: |
+          if grep -E "ERROR: (Address|Leak|Undefined)|runtime error" ~/nn/log/tunneld.log; then exit 1; fi
+          echo "no sanitizer reports"
       - name: bench
         run: RESULTS_TAG=ci N=300 scripts/bench.sh
       - name: report
