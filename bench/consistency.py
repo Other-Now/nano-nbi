@@ -16,7 +16,8 @@ import time
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "tests"))
 from nbi import (RPCError, config, connect, delete_all_xml, expected_kernel,  # noqa: E402
-                 kernel_tunnels, restart_tunneld, running_tunnels, tunnel_xml)
+                 kernel_tunnels, restart_tunneld, running_tunnels, start_tunneld,
+                 stop_tunneld, tunnel_xml, TunneldStartError)
 
 N, SEED = int(sys.argv[1]), int(sys.argv[2])
 NO_RB = "--no-rollback" in sys.argv
@@ -80,10 +81,20 @@ def main():
         s["delete_all_via_nbi"] = "ok"
     except RPCError as e:
         s["delete_all_via_nbi"] = "rejected: " + str(e)[:80]
+    # can a fresh, correct tunneld start on the config this run left behind?
+    try:
+        restart_tunneld()
+        s["fresh_tunneld_on_final_config"] = "starts"
+    except TunneldStartError as e:
+        s["fresh_tunneld_on_final_config"] = "FAILS: " + str(e)[:90]
     print(json.dumps(s), flush=True)
-    restart_tunneld()  # flush + rebuild from the datastore
+    # clean slate: clear running with no subscriber, then start tunneld
+    stop_tunneld()
+    m.close_session()
+    m = connect()
     m.edit_config(target="running", config=delete_all_xml())
-    assert kernel_tunnels() == {}
+    start_tunneld()
+    assert kernel_tunnels() == {} and running_tunnels(m) == {}
 
 
 main()

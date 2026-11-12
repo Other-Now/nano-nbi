@@ -116,16 +116,29 @@ def stack(cmd):
                    stdout=subprocess.DEVNULL)
 
 
-def restart_tunneld(env=None, kill9=False):
+class TunneldStartError(RuntimeError):
+    pass
+
+
+def stop_tunneld(kill9=False):
     run = os.path.expanduser("~/nn/run/tunneld.pid")
     pid = int(open(run).read())
-    subprocess.run(["kill", "-9" if kill9 else "-TERM", str(pid)])
+    subprocess.run(["kill", "-9" if kill9 else "-TERM", str(pid)], stderr=subprocess.DEVNULL)
     wait_for(lambda: not os.path.exists(f"/proc/{pid}") or
              open(f"/proc/{pid}/stat").read().split()[2] == "Z", 5)
+
+
+def restart_tunneld(env=None, kill9=False):
+    stop_tunneld(kill9)
     return start_tunneld(env)
 
 
 def start_tunneld(env=None):
+    """Start tunneld and wait for "ready". Raises TunneldStartError if it
+    exits first (e.g. its startup apply of the running config fails) or
+    never gets ready. (An earlier version returned silently, and a
+    benchmark ran with no tunneld at all: sysrepo commits edits that have
+    no subscriber, so they never reached the kernel.)"""
     log = os.path.expanduser("~/nn/log/tunneld.log")
     start = os.path.getsize(log) if os.path.exists(log) else 0
     e = dict(os.environ)
@@ -136,11 +149,14 @@ def start_tunneld(env=None):
                          stdout=open(log, "a"), stderr=subprocess.STDOUT)
     open(os.path.expanduser("~/nn/run/tunneld.pid"), "w").write(str(p.pid))
 
-    def ready():
+    def tail():
         with open(log) as f:
             f.seek(start)
-            return "tunneld: ready" in f.read()
-    wait_for(ready, 10)
+            return f.read()
+    if not wait_for(lambda: "tunneld: ready" in tail() or p.poll() is not None, 15) \
+            or "tunneld: ready" not in tail():
+        p.kill()
+        raise TunneldStartError(tail().strip().splitlines()[-1] if tail().strip() else "no output")
     return p
 
 
