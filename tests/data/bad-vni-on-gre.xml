@@ -1,0 +1,1 @@
+<tunnels xmlns="urn:nano-nbi:tunnels"><tunnel><name>g1</name><type>gre</type><vni>5</vni><local>10.0.0.1</local><remote>10.0.0.2</remote></tunnel></tunnels>

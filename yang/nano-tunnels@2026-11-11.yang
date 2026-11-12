@@ -1,0 +1,106 @@
+module nano-tunnels {
+  yang-version 1.1;
+  namespace "urn:nano-nbi:tunnels";
+  prefix nt;
+
+  import ietf-inet-types { prefix inet; }
+  import ietf-yang-types { prefix yang; }
+
+  organization "nano-nbi";
+  description
+    "Overlay tunnels (VXLAN / GRE) managed through a data-driven
+     north-bound interface. Configuration is applied to the Linux
+     kernel by tunneld; operational state is read back from it.";
+
+  revision 2026-11-11 {
+    description "Initial revision.";
+  }
+
+  typedef tunnel-type {
+    type enumeration {
+      enum vxlan { description "VXLAN (RFC 7348), UDP encapsulation."; }
+      enum gre   { description "GRE (RFC 2784), IP protocol 47."; }
+    }
+  }
+
+  typedef oper-status {
+    type enumeration {
+      enum up     { description "Link exists and is administratively up."; }
+      enum down   { description "Link exists but is administratively down."; }
+      enum absent { description "Configured, but no such link in the kernel."; }
+    }
+  }
+
+  container tunnels {
+    description "All managed overlay tunnels.";
+
+    list tunnel {
+      key "name";
+      unique "vni";
+      description "One tunnel interface.";
+
+      must "local != remote" {
+        error-message "local and remote endpoints must differ";
+      }
+
+      leaf name {
+        type string {
+          // Linux IFNAMSIZ is 16 including the NUL.
+          pattern '[a-z][a-z0-9-]{0,14}';
+        }
+        description "Kernel interface name.";
+      }
+      leaf type {
+        type tunnel-type;
+        mandatory true;
+      }
+      leaf vni {
+        when "../type = 'vxlan'";
+        type uint32 { range "1..16777215"; }
+        mandatory true;
+        description "VXLAN network identifier (24 bits).";
+      }
+      leaf dst-port {
+        when "../type = 'vxlan'";
+        type inet:port-number;
+        default 4789;
+      }
+      leaf local {
+        type inet:ipv4-address-no-zone;
+        mandatory true;
+      }
+      leaf remote {
+        type inet:ipv4-address-no-zone;
+        mandatory true;
+      }
+      leaf mtu {
+        type uint16 { range "68..9000"; }
+        default 1450;
+      }
+      leaf enabled {
+        type boolean;
+        default true;
+        description "Administrative state.";
+      }
+
+      container state {
+        config false;
+        description "Read back from the kernel on every get.";
+        leaf oper-status { type oper-status; }
+        leaf if-index    { type uint32; }
+        leaf rx-packets  { type yang:counter64; }
+        leaf tx-packets  { type yang:counter64; }
+        leaf rx-bytes    { type yang:counter64; }
+        leaf tx-bytes    { type yang:counter64; }
+      }
+    }
+  }
+
+  notification tunnel-oper-status-change {
+    description
+      "Sent when a tunnel's observed state changes, including changes
+       made outside the NBI (e.g. 'ip link set down' by hand).";
+    leaf name { type string; }
+    leaf oper-status { type oper-status; }
+  }
+}

@@ -1,0 +1,6 @@
+ncclient==0.7.1
+paramiko==5.1.0
+pygnmi==0.8.15
+grpcio==1.85.1
+protobuf==7.36.2
+pytest

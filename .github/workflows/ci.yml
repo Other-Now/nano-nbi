@@ -1,0 +1,64 @@
+name: ci
+on: [push, pull_request]
+jobs:
+  nbi:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: packages
+        run: |
+          sudo apt-get update
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y \
+            libssh-dev libcurl4-openssl-dev libssl-dev libpcre2-dev iproute2
+          # Ubuntu 24.04 blocks unprivileged user namespaces via AppArmor;
+          # scripts/ns.sh needs them (everything runs as fake-root in a netns).
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+          python3 -m venv ~/nn-venv
+          ~/nn-venv/bin/pip install -q -r requirements.txt
+      - name: cache NETCONF stack
+        id: cache
+        uses: actions/cache@v4
+        with:
+          path: ~/nn/root
+          key: nn-root-${{ hashFiles('scripts/build-deps.sh') }}
+      - name: build libyang / sysrepo / libnetconf2 / netopeer2
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: scripts/build-deps.sh
+      - name: fetch netopeer2 setup scripts (cache hit skips the clone)
+        if: steps.cache.outputs.cache-hit == 'true'
+        run: |
+          git init -q ~/nn-src/netopeer2
+          git -C ~/nn-src/netopeer2 fetch -q --depth 1 https://github.com/CESNET/netopeer2 92e18139e996fe9333f441e3521d514b0d5282d9
+          git -C ~/nn-src/netopeer2 checkout -q FETCH_HEAD
+      - name: yanglint
+        run: |
+          source scripts/env.sh
+          yanglint -p yang yang/nano-tunnels@2026-11-11.yang
+          yanglint -p yang -t config yang/nano-tunnels@2026-11-11.yang tests/data/good.xml
+          ! yanglint -p yang -t config yang/nano-tunnels@2026-11-11.yang tests/data/bad-vni-on-gre.xml
+      - name: build tunneld (release + ASan/UBSan)
+        run: |
+          source scripts/env.sh
+          cmake -S . -B ~/nn-build && cmake --build ~/nn-build -j
+          cmake -S . -B ~/nn-build-asan -DNN_ASAN=ON && cmake --build ~/nn-build-asan -j
+      - name: tests (NETCONF + gNMI, end to end)
+        run: scripts/test.sh -v
+      - name: tests with ASan tunneld
+        run: NN_BUILD=$HOME/nn-build-asan scripts/test.sh
+      - name: asan report
+        if: always()
+        run: grep -E "ERROR: (Address|Leak|Undefined)|runtime error" ~/nn/log/tunneld.log && exit 1 || echo "no sanitizer reports"
+      - name: bench
+        run: RESULTS_TAG=ci N=300 scripts/bench.sh
+      - name: report
+        run: |
+          python3 tools/report.py results/ci > results/ci/RESULTS.md
+          cat results/ci/RESULTS.md >> "$GITHUB_STEP_SUMMARY"
+          echo "CPU: $(lscpu | sed -n 's/^Model name: *//p'), $(nproc) vCPU, kernel $(uname -r)" >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: results
+          path: |
+            results/
+            ~/nn/log/

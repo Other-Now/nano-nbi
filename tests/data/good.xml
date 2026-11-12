@@ -1,0 +1,1 @@
+<tunnels xmlns="urn:nano-nbi:tunnels"><tunnel><name>vx1</name><type>vxlan</type><vni>100</vni><local>10.0.0.1</local><remote>10.0.0.2</remote></tunnel><tunnel><name>g1</name><type>gre</type><local>10.0.0.1</local><remote>10.0.0.3</remote></tunnel></tunnels>
